@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+requests
+beautifulsoup4
+html2text
+playwright
+asyncio
+textwrap
+openai
