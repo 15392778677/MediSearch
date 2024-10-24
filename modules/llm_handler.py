@@ -23,7 +23,9 @@ class LLMHandler:
         使用 LLM 生成响应。
         """
         try:
-            return self.llm._call(prompt)
+            resutl = self.llm._call(prompt)
+            # print(resutl)
+            return resutl
         except Exception as e:
             return f"生成响应失败：{e}"
 
@@ -82,6 +84,7 @@ class LLMHandler:
         今天的日期是 {formatted_time}，以下是 INITIAL_QUERY：
         {response.user_question}
         """
+        # print(prompt)
         return prompt
 
     def Mermaid_Graph_Prompt(self, response: Res) -> str:
@@ -97,3 +100,36 @@ class LLMHandler:
         输出：
         """
         return prompt
+    
+    def get_query_prompt_from_keywords(self, Question: str,keywords: str) -> str:
+        prompt = f"""
+        ## role：
+        你是一个学术查询语句生成器，你需要根据用户问题和关键词列表生成查询语句，可以使用复杂bool查询语法。
+        ## goles：
+        你需要理解用户意图，并生成最合适的查询语法!
+        ##  action：
+        1.首先请检查{keywords}是否是英文，如果不是,先转换为英文,生成KEYWORDS_ENGLISH
+        2.根据UER_QUESTION补充更多的KEYWORDS_ENGLISH，你可以进行联想，生成的关键词必须遵循MeSH标准。
+        3.KEYWORDS必须简洁没有歧义，不能包含过多的词汇。
+        2.根据KEYWORDS_ENGLISH和USER_QUESTION生成查询语句，并使用bool查询语法。
+        ## 规则：
+        你生成查询语句只能是使用bool运算符(AND, OR, NOT)连接的KEYWORDS_ENGLISH，不能使用其他语法。
+        不要生成多余的废话，只需输出查询语句即可。
+        生成的查询语句必须遵循MeSH标准。
+        MeSH (Medical Subject Headings) 是 PubMed 的受控词汇表，专门用于对生物医学文献进行分类。
+        MeSH标准指的是使用[Mesh Terms]和[All Fields]来标记查询语句中的关键词。
+        [MeSH Terms]表示医学主题词汇，[All Fields]表示所有领域的词汇。
+        输出必须是英文!
+        ## example:
+        keywords: ["herbal medicine","machine learning","artificial intelligence","research"]
+        query_statement: '"herbal medicine"[MeSH Terms] AND (machine learning[All Fields] OR artificial intelligence[All Fields]) AND "research"[MeSH Terms]'
+        ## input：
+        下面是USER_QUESTION和KEYWORDS：
+        USER_QUESTION：{Question}
+        KEYWORDS：{keywords}
+        输出：
+
+        """
+        return prompt
+    
+    

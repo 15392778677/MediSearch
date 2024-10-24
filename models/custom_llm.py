@@ -1,8 +1,8 @@
 '''
 Date: 2024-10-13 17:48:43
 LastEditors: yangyehan 1958944515@qq.com
-LastEditTime: 2024-10-18 16:44:49
-FilePath: /MediSearch/models/custom_llm.py
+LastEditTime: 2024-10-23 17:06:37
+FilePath: /MediSearch_SSE/models/custom_llm.py
 Description: 
 '''
 # models/custom_llm.py
@@ -68,7 +68,7 @@ class CustomLLM(LLM):
 
         try:
             client = OpenAI(
-                api_key='YOUR_API_KEY_HERE',  # 请确保使用安全的方式存储API密钥
+                api_key='sk-fMSbNiWFQUfXBoWnF433CcE88f1245F8BcBcAe2bBdA30d72',  # 请确保使用安全的方式存储API密钥
                 base_url='https://api.gpt.ge/v1/'
             )
             response = client.chat.completions.create(

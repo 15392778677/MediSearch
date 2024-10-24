@@ -16,6 +16,7 @@ from modules.llm_handler import LLMHandler, Res
 from modules.flowchat import MermaidToImageUploader
 from modules.Markdown import render_markdown_image, parse_mermaid_syntax
 from config import API_KEY
+from modules.pubmed_search import PubMedSearch
 
 app = FastAPI()
 
@@ -42,6 +43,7 @@ def convert_to_markdown(arxiv_reference):
         keywords = ', '.join(ref['keywords'])
         summary = ref['summary'].replace('\n', ' ')
         markdown += f"| {title} | [Link]({url}) | {keywords} | {summary} |\n"
+        print("cobvert to markdown finished")
     return markdown
 
 @track_performance
@@ -65,15 +67,21 @@ async def generate_detailed_response(result, conversation_history, executor):
     reference = result.get('reference', [])
     arxiv_reference = result.get('arxiv_reference', [])
 
-    reference_text = "\n\n".join([
-        f"Title: {ref['title']}\nURL: {ref['url']}\nSummary: {ref['summary']}"
-        for ref in reference
-    ])
+    if reference:
+        reference_text = "\n\n".join([
+            f"Title: {ref['title']}\nURL: {ref['url']}\nSummary: {ref['summary']}"
+            for ref in reference
+        ])
+    else:
+        reference_text = ""
 
-    arxiv_reference_text = "\n\n".join([
-        f"Title: {ref['title']}\nURL: {ref['url']}\nKeywords: {', '.join(ref['keywords'])}\nSummary: {ref['summary']}"
-        for ref in arxiv_reference
-    ])
+    if arxiv_reference:
+        arxiv_reference_text = "\n\n".join([
+            f"Title: {ref['title']}\nURL: {ref['url']}\nKeywords: {', '.join(ref['keywords'])}\nSummary: {ref['summary']}"
+            for ref in arxiv_reference
+        ])
+    else:
+        arxiv_reference_text = ""
 
     res = Res(response, outline, reference_text, arxiv_reference_text, conversation_history)
     llm_handler = LLMHandler()
@@ -85,31 +93,47 @@ async def generate_detailed_response(result, conversation_history, executor):
     print("detailed response future created")
 
     # 并发获取图表和转换 markdown
-    graph_and_markdown = await asyncio.gather(
-        get_Graph(res, executor),
-        asyncio.get_event_loop().run_in_executor(executor, convert_to_markdown, arxiv_reference)
-    )
-    print("graph and markdown future created")
+    # 检查是否有 arXiv 结果如果没有则不进行转换表格
+    if arxiv_reference:
+        # 合并结果到一个列表中
+        reference_all = []
+        reference_all.extend(arxiv_reference)  # 将 arXiv 结果添加到列表
+        reference_all.extend(reference)  # 将 PubMed 结果添加到列表
+        # 提取 title, url, summary 的一行表达式
+        filtered_reference_all = [
+            {"title": ref["title"], "url": ref["url"],"keywords": ref["keywords"], "summary": ref["summary"]}
+            for ref in reference_all
+        ]
+        graph_and_markdown = await asyncio.gather(
+            get_Graph(res, executor),
+            asyncio.get_event_loop().run_in_executor(executor, convert_to_markdown, filtered_reference_all),
+            return_exceptions=True
+        )
+        print("graph and markdown future created")
+        
+        graph_result, reference_table_english = graph_and_markdown
+    else:
+        # 使用 asyncio.gather 即使只有一个协程
+        graph_result = await get_Graph(res, executor)
+        reference_table_english = ""
 
     detailed_response = await detailed_response_future
-
-    graph_result, reference_table_english = graph_and_markdown
 
     # 生成图表
     if graph_result['stateCode'] == 200:
         detailed_response += f"\n\n{render_markdown_image(graph_result['image_url'])}\n\n"
 
     # 添加参考文献表格
-    reference_table_chinese = await asyncio.get_event_loop().run_in_executor(
-        executor, conver_to_chinese, reference_table_english
-    )
-    print("reference table future created")
-
-    detailed_response += "\n\n### 相关论文整理表格 (英文)\n"
-    detailed_response += reference_table_english
-    detailed_response += "\n\n### 相关论文整理表格 (中文)\n"
-    detailed_response += reference_table_chinese
-
+    if reference_table_english:
+        reference_table_chinese = await asyncio.get_event_loop().run_in_executor(
+            executor, conver_to_chinese, reference_table_english
+        )
+        print("reference table future created")
+        detailed_response += "\n\n### 相关论文整理表格 (英文)\n"
+        detailed_response += reference_table_english
+        detailed_response += "\n\n### 相关论文整理表格 (中文)\n"
+        detailed_response += reference_table_chinese
+    
     return detailed_response
 
 @track_performance
@@ -120,6 +144,7 @@ async def get_Graph(res: Res, executor) -> dict:
     result = await asyncio.get_event_loop().run_in_executor(
         executor, llm_handler.generate_response, prompt
     )
+    print("graph future created finished")
     mermaid_code = parse_mermaid_syntax(result)
     uploader = MermaidToImageUploader()
     image_url, error = await uploader.get_image_url(mermaid_code)
@@ -130,77 +155,58 @@ async def get_Graph(res: Res, executor) -> dict:
 
 @track_performance
 async def MediSearch(conversation_history, send_update):
-    mediator = Mediator(api_key=API_KEY)
+    
     summarizer = Summarizer()
-    web_scraper = WebScraper()
     arxiv_search = ArxivSearch()
 
-    # 获取医学建议
-    advice_response = mediator.fetch_medicine_advice_with_history(conversation_history)
-    if advice_response['last_text_event']:
-        conversation_history.append(advice_response['last_text_event'])
-
     # 创建线程池
-    executor = ThreadPoolExecutor(max_workers=10)
+    executor = ThreadPoolExecutor(max_workers=5)
+
+    keywords = arxiv_search.fetch_keywords_from_conversation(conversation_history)
 
     try:
-        # 开始任务
-
-        # 生成大纲
-        outline_future = asyncio.get_event_loop().run_in_executor(
-            executor, summarizer.generate_outline, conversation_history
-        )
-
+        outline_future = summarizer.generate_outline(conversation_history)
+        conversation_history.append(outline_future)
+        await send_update(json.dumps({"type": "outline", "data": outline_future}))
+        
         # 获取 arXiv 文章
         def fetch_arxiv():
-            keywords = arxiv_search.fetch_keywords_from_conversation(conversation_history)
             arxiv_response = arxiv_search.search_arxiv_papers(keywords)
             arxiv_articles = arxiv_search.parse_arxiv_response(arxiv_response)
             return arxiv_articles
+        
+        # 获取 PubMed 文章
+        def fetch_pubmed():
+            pubmedsearch = PubMedSearch()
+            try:
+                resutl = pubmedsearch.get_result_from_keywords(keywords)
+                return resutl
+            except Exception as e:
+                print(f"Error: {e}")
+                return []
+        
+        arxiv_articles, pubmed_articles = await asyncio.gather(
+             asyncio.get_event_loop().run_in_executor(executor, fetch_arxiv),
+             asyncio.get_event_loop().run_in_executor(executor, fetch_pubmed)
+            )
 
-        arxiv_future = asyncio.get_event_loop().run_in_executor(
-            executor, fetch_arxiv
-        )
-
-        # 发送初始结果
-        async def send_initial_results():
-            outline = await outline_future
-            await send_update(json.dumps({"type": "outline", "data": outline}))
-
-            arxiv_articles = await arxiv_future
-            await send_update(json.dumps({"type": "arxiv_reference", "data": arxiv_articles}))
-
-        initial_results_task = asyncio.create_task(send_initial_results())
-
-        # 获取并总结文章
-        def fetch_and_summarize(article):
-            html_content = web_scraper.fetch_and_parse_single_url(article.get('url', ''))
-            summary = summarizer.summarize_html_content(article.get('title', ''), html_content)
-            print("summary finished")
-            return {
-                'title': article.get('title', 'N/A'),
-                'url': article.get('url', 'N/A'),
-                'summary': summary
-            }
-
-        # 使用线程池并发处理文章
-        article_futures = [
-            asyncio.get_event_loop().run_in_executor(
-                executor, fetch_and_summarize, article
-            ) for article in advice_response['articles']
+        # 合并结果到一个列表中
+        reference_all = []
+        reference_all.extend(arxiv_articles)  # 将 arXiv 结果添加到列表
+        reference_all.extend(pubmed_articles)  # 将 PubMed 结果添加到列表
+        # 提取 title, url, summary 的一行表达式
+        filtered_reference_all = [
+            {"title": ref["title"], "url": ref["url"], "summary": ref["summary"]}
+            for ref in reference_all
         ]
-        articles_info = await asyncio.gather(*article_futures)
-
-        # 等待初始结果发送完成
-        await initial_results_task
-        print("initial results sent")
+        await send_update(json.dumps({"type": "reference_all", "data": filtered_reference_all}))
 
         # 准备最终结果
         result = {
-            "response": advice_response['last_text_event'],
-            "outline": await outline_future,
-            "reference": articles_info,
-            "arxiv_reference": await arxiv_future
+            "response": "",
+            "outline":  outline_future,
+            "reference": pubmed_articles,
+            "arxiv_reference":  arxiv_articles
         }
 
         # 生成详细响应
@@ -215,7 +221,7 @@ async def MediSearch(conversation_history, send_update):
         # 关闭线程池
         executor.shutdown()
 
-@app.post("/medisearch")
+@app.post("/medisearch_sse")
 async def medisearch_endpoint(query: dict):
     """
     MediSearch 接口，接受 'conversation_history' 字段。

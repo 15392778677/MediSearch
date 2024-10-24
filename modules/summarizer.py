@@ -1,3 +1,10 @@
+'''
+Date: 2024-10-13 16:53:49
+LastEditors: yangyehan 1958944515@qq.com
+LastEditTime: 2024-10-23 20:05:54
+FilePath: /MediSearch_SSE/modules/summarizer.py
+Description: 
+'''
 # modules/summarizer.py
 import sys
 sys.path.append('..')
@@ -45,7 +52,7 @@ class Summarizer:
         """
         advice_text = " ".join(conversation_history)
         prompt = f"""
-        根据以下对话内容生成一个结构化大纲。
+        根据以下用户问题生成一个结构化大纲。
         不需要精确到具体细节。
         请尽量简明扼要，便于理解。使用 Markdown 格式。
         只需提供大纲内容，不需要额外说明。

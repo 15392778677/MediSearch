@@ -1,8 +1,8 @@
 '''
 Date: 2024-10-13 17:37:45
 LastEditors: yangyehan 1958944515@qq.com
-LastEditTime: 2024-10-18 17:17:38
-FilePath: /MediSearch/modules/arxiv_search.py
+LastEditTime: 2024-10-24 16:23:22
+FilePath: /MediSearch_SSE/modules/arxiv_search.py
 Description: 
 '''
 # modules/arxiv_search.py
@@ -24,15 +24,19 @@ class ArxivSearch:
         """
         advice_text = " ".join(conversation_history)
         prompt = f"""
-        根据对话历史，提取一到两个关键词，用于后续的 arXiv 查询。
+        根据对话历史，提取2-3个关键词，用于后续的 arXiv 查询。
         返回格式仅包含关键词，每个关键词不超过两个英文单词。
-        关键词应易于理解，不要使用复杂的医学词汇。
+        关键词应简洁明了，应易于理解，不要使用复杂的医学词汇。
+        生成的英文单词必须简洁！
         格式如下：
-        keyword1, keyword2
+        keyword1, keyword2, keyword3
         以下为对话历史：
+        注意这里返回的关键词必须是英文！
+        输出的关键词必须是英文！
         {advice_text}
         """
         keywords = self.llm_handler.generate_response(prompt)
+        print("Keywords: ", keywords)
         return [kw.strip() for kw in keywords.strip().split(',')]
 
     @track_performance
@@ -41,12 +45,13 @@ class ArxivSearch:
         使用关键词搜索 arXiv 论文。
         """
         base_url = "http://export.arxiv.org/api/query?"
-        search_query = '+AND+'.join([f'all:{keyword}' for keyword in keywords])
+        search_query = '+OR+'.join([f'all:{keyword}' for keyword in keywords])
         query = f"search_query={search_query}&start=0&max_results=20"
         response = requests.get(base_url + query)
         if response.status_code == 200:
             return response.text
         else:
+            print(f"Error: {response.status_code}")
             return f"Error: {response.status_code}"
 
     @track_performance
@@ -71,3 +76,11 @@ class ArxivSearch:
                 'summary': summary
             })
         return articles
+if __name__ == '__main__':
+    arxiv_search = ArxivSearch()
+    conversation_history = ["中草药大模型最新的研究方向？"]
+    keywords = arxiv_search.fetch_keywords_from_conversation(conversation_history)
+    print(keywords)
+    xml_response = arxiv_search.search_arxiv_papers(keywords)
+    articles = arxiv_search.parse_arxiv_response(xml_response)
+    print(articles)
