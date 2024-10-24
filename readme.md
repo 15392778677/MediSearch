@@ -1,8 +1,8 @@
 <!--
  * @Date: 2024-06-05 12:31:39
  * @LastEditors: yangyehan 1958944515@qq.com
- * @LastEditTime: 2024-10-14 17:20:43
- * @FilePath: /memfree-main/Users/mac/Documents/jingfangzhigu/jingfangzhigu_mutiple_agents-main/jingfangzhigu_1.0/MediSearch/readme.md
+ * @LastEditTime: 2024-10-24 17:39:14
+ * @FilePath: /MediSearch_SSE/readme.md
  * @Description: 
 -->
 # 项目名称
@@ -10,7 +10,7 @@
 MediSearch 医学咨询与参考文献检索系统
 
 # 项目运行逻辑
-![逻辑运行图](./docs/drowflowchat.jpg)
+![逻辑运行图](./docs/new_flow.jpg)
 
 ## 项目简介
 
