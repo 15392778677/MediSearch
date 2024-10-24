@@ -162,12 +162,13 @@ async def MediSearch(conversation_history, send_update):
     # 创建线程池
     executor = ThreadPoolExecutor(max_workers=5)
 
-    keywords = arxiv_search.fetch_keywords_from_conversation(conversation_history)
+    
 
     try:
         outline_future = summarizer.generate_outline(conversation_history)
         conversation_history.append(outline_future)
         await send_update(json.dumps({"type": "outline", "data": outline_future}))
+        keywords = arxiv_search.fetch_keywords_from_conversation(conversation_history)
         
         # 获取 arXiv 文章
         def fetch_arxiv():
