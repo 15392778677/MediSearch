@@ -1,7 +1,7 @@
 <!--
  * @Date: 2024-06-05 12:31:39
  * @LastEditors: yangyehan 1958944515@qq.com
- * @LastEditTime: 2024-10-24 17:39:14
+ * @LastEditTime: 2024-10-24 17:55:24
  * @FilePath: /MediSearch_SSE/readme.md
  * @Description: 
 -->
@@ -10,7 +10,7 @@
 MediSearch 医学咨询与参考文献检索系统
 
 # 项目运行逻辑
-![逻辑运行图](./docs/new_flow.jpg)
+![逻辑运行图](./docs/new_flowchat.jpg)
 
 ## 项目简介
 
